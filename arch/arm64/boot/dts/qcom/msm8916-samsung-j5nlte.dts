@@ -10,6 +10,29 @@
 / {
 	model = "Samsung Galaxy J5 2015 (SM-J500FN)";
 	compatible = "samsung,j5nlte", "qcom,msm8916";
+        reg_vlcd_vdd3: regulator-vlcd-vdd3 {
+                compatible = "regulator-fixed";
+                regulator-name = "vlcd_vdd3";
+                regulator-min-microvolt = <1800000>;
+                regulator-max-microvolt = <1800000>;
+                vin-supply = <&pm8916_s4>;
+
+                gpio = <&msmgpio 87 GPIO_ACTIVE_HIGH>;
+                enable-active-high;
+
+                pinctrl-names = "default";
+                pinctrl-0 = <&lcd_on_default>;
+        };
+
+        reg_vlcd_vci: regulator-vlcd-vci {
+                compatible = "regulator-fixed";
+                regulator-name = "vlcd_vci";
+                regulator-min-microvolt = <3000000>;
+                regulator-max-microvolt = <3000000>;
+
+                gpio = <&msmgpio 87 GPIO_ACTIVE_HIGH>;
+                enable-active-high;
+        };
 
 	aliases {
 		serial0 = &blsp1_uart2;
@@ -83,6 +106,21 @@
 		wcnss@a21b000 {
 			status = "okay";
 		};
+		
+		mdss@1a00000 {
+			dsi@1a98000 {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				vdda-supply = <&pm8916_l2>;
+				vddio-supply = <&pm8916_l6>;
+			};
+
+			dsi-phy@1a98300 {
+				vddio-supply = <&pm8916_l6>;
+				qcom,dsi-phy-regulator-ldo-mode;
+			};
+		};
 
 		/*
 		 * Attempting to enable these devices causes a "synchronous
@@ -113,6 +151,60 @@
 		compatible = "linux,extcon-usb-gpio";
 		vbus-gpio = <&msmgpio 105 GPIO_ACTIVE_HIGH>;
 	};
+};
+
+&dsi0 {
+        panel@0 {
+                reg = <0>;
+
+                compatible = "samsung,s6e8aa5x01-ams497hy01";
+
+                vdd3-supply = <&reg_vlcd_vdd3>;
+		vci-supply = <&reg_vlcd_vci>;
+
+                reset-gpios = <&msmgpio 25 GPIO_ACTIVE_HIGH>;
+
+                ports {
+                        panel_in: endpoint {
+                                remote-endpoint = <&dsi0_out>;
+                        };
+                };
+        };
+
+        ports {
+                port@1 {
+                        dsi0_out: endpoint {
+                                remote-endpoint = <&panel_in>;
+                                data-lanes = <0 1>;
+                        };
+                };
+        };
+};
+
+&msmgpio {
+        panel_vdd3_default: panel-vdd3-default {
+                pinmux {
+                        function = "gpio";
+                        pins = "gpio9";
+                };
+                pinconf {
+                        pins = "gpio9";
+                        drive-strength = <2>;
+                        bias-disable;
+                };
+        };
+        lcd_on_default: lcd_on_default {
+                pinmux {
+                        function = "gpio";
+                        pins = "gpio87";
+                };
+                pinconf {
+                        pins = "gpio87";
+                        drive-strength = <2>;
+                        bias-disable;
+                };
+        };
+
 };
 
 &smd_rpm_regulators {

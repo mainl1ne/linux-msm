@@ -54,3 +54,4 @@ obj-$(CONFIG_DRM_PANEL_TPO_TPG110) += panel-tpo-tpg110.o
 obj-$(CONFIG_DRM_PANEL_TRULY_NT35597_WQXGA) += panel-truly-nt35597.o
 obj-$(CONFIG_DRM_PANEL_XINPENG_XPP055C272) += panel-xinpeng-xpp055c272.o
 obj-$(CONFIG_DRM_PANEL_YUSHUN_NT35520) += panel-yushun-nt35520.o
+obj-$(CONFIG_DRM_PANEL_SAMSUNG_S6E8AA5X01_AMS497HY01) += panel-samsung-s6e8aa5x01-ams497hy01.o
