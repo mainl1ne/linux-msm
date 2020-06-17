@@ -3,11 +3,11 @@
 // Generated with linux-mdss-dsi-panel-driver-generator from vendor device tree:
 //   Copyright (c) 2013, The Linux Foundation. All rights reserved. (FIXME)
 
-#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/regulator/consumer.h>
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
@@ -16,6 +16,7 @@
 struct s6e8aa5x01_ams497hy01 {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
+	struct regulator_bulk_data supplies[2];
 	struct gpio_desc *reset_gpio;
 	bool prepared;
 };
@@ -112,12 +113,19 @@ static int s6e8aa5x01_ams497hy01_prepare(struct drm_panel *panel)
 	if (ctx->prepared)
 		return 0;
 
+	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
+	if (ret < 0) {
+		dev_err(dev, "Failed to enable regulators: %d\n", ret);
+		return ret;
+	}
+
 	s6e8aa5x01_ams497hy01_reset(ctx);
 
 	ret = s6e8aa5x01_ams497hy01_on(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Failed to initialize panel: %d\n", ret);
 		gpiod_set_value_cansleep(ctx->reset_gpio, 0);
+		regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 		return ret;
 	}
 
@@ -139,6 +147,7 @@ static int s6e8aa5x01_ams497hy01_unprepare(struct drm_panel *panel)
 		dev_err(dev, "Failed to un-initialize panel: %d\n", ret);
 
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
+	regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 
 	ctx->prepared = false;
 	return 0;
@@ -184,66 +193,6 @@ static const struct drm_panel_funcs s6e8aa5x01_ams497hy01_panel_funcs = {
 	.get_modes = s6e8aa5x01_ams497hy01_get_modes,
 };
 
-static int s6e8aa5x01_ams497hy01_bl_update_status(struct backlight_device *bl)
-{
-	struct mipi_dsi_device *dsi = bl_get_data(bl);
-	u16 brightness = bl->props.brightness;
-	int ret;
-
-	if (bl->props.power != FB_BLANK_UNBLANK ||
-	    bl->props.fb_blank != FB_BLANK_UNBLANK ||
-	    bl->props.state & (BL_CORE_SUSPENDED | BL_CORE_FBBLANK))
-		brightness = 0;
-
-	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
-
-	ret = mipi_dsi_dcs_set_display_brightness(dsi, brightness);
-	if (ret < 0)
-		return ret;
-
-	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
-
-	return 0;
-}
-
-// TODO: Check if /sys/class/backlight/.../actual_brightness actually returns
-// correct values. If not, remove this function.
-static int s6e8aa5x01_ams497hy01_bl_get_brightness(struct backlight_device *bl)
-{
-	struct mipi_dsi_device *dsi = bl_get_data(bl);
-	u16 brightness = bl->props.brightness;
-	int ret;
-
-	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
-
-	ret = mipi_dsi_dcs_get_display_brightness(dsi, &brightness);
-	if (ret < 0)
-		return ret;
-
-	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
-
-	return brightness & 0xff;
-}
-
-static const struct backlight_ops s6e8aa5x01_ams497hy01_bl_ops = {
-	.update_status = s6e8aa5x01_ams497hy01_bl_update_status,
-	.get_brightness = s6e8aa5x01_ams497hy01_bl_get_brightness,
-};
-
-static struct backlight_device *
-s6e8aa5x01_ams497hy01_create_backlight(struct mipi_dsi_device *dsi)
-{
-	struct device *dev = &dsi->dev;
-	struct backlight_properties props = {
-		.type = BACKLIGHT_RAW,
-		.brightness = 255,
-		.max_brightness = 255,
-	};
-
-	return devm_backlight_device_register(dev, dev_name(dev), dev, dsi,
-					      &s6e8aa5x01_ams497hy01_bl_ops, &props);
-}
-
 static int s6e8aa5x01_ams497hy01_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
@@ -253,6 +202,15 @@ static int s6e8aa5x01_ams497hy01_probe(struct mipi_dsi_device *dsi)
 	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
+
+	ctx->supplies[0].supply = "vdd3";
+	ctx->supplies[1].supply = "vci";
+	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(ctx->supplies),
+				      ctx->supplies);
+	if (ret < 0) {
+		dev_err(dev, "Failed to get regulators: %d\n", ret);
+		return ret;
+	}
 
 	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ctx->reset_gpio)) {
@@ -270,13 +228,6 @@ static int s6e8aa5x01_ams497hy01_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_init(&ctx->panel, dev, &s6e8aa5x01_ams497hy01_panel_funcs,
 		       DRM_MODE_CONNECTOR_DSI);
-
-	ctx->panel.backlight = s6e8aa5x01_ams497hy01_create_backlight(dsi);
-	if (IS_ERR(ctx->panel.backlight)) {
-		ret = PTR_ERR(ctx->panel.backlight);
-		dev_err(dev, "Failed to create backlight: %d\n", ret);
-		return ret;
-	}
 
 	ret = drm_panel_add(&ctx->panel);
 	if (ret < 0) {

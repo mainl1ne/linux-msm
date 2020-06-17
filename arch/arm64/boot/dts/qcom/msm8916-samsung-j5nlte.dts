@@ -94,7 +94,6 @@
 
 			dsi-phy@1a98300 {
 				vddio-supply = <&pm8916_l6>;
-				qcom,dsi-phy-regulator-ldo-mode;
 			};
 		};
 
@@ -145,9 +144,9 @@
                 reset-gpios = <&msmgpio 25 GPIO_ACTIVE_HIGH>;
 
                 ports {
-				#address-cells = <1>;
-				#size-cells = <0>;  
-				panel_in: endpoint {
+					#address-cells = <1>;
+					#size-cells = <0>;  
+					panel_in: endpoint {
                                 remote-endpoint = <&dsi0_out>;
                         };
                 };
