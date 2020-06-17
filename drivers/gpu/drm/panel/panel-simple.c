@@ -4056,9 +4056,9 @@ static const struct of_device_id dsi_of_match[] = {
 	}, {
 		.compatible = "boe,tv080wum-nl0",
 		.data = &boe_tv080wum_nl0
-	}, {
-		.compatible = "samsung,s6e8aa5x01-ams497hy01",
-        .data = &samsung_s6e8aa5x01_ams497hy01,
+	//}, {
+	//	.compatible = "samsung,s6e8aa5x01-ams497hy01",
+    //   .data = &samsung_s6e8aa5x01_ams497hy01,
     }, {
 		.compatible = "lg,ld070wx3-sl01",
 		.data = &lg_ld070wx3_sl01
