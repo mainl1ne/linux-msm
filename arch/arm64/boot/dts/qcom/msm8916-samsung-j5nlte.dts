@@ -145,10 +145,13 @@
 
                 ports {
 					#address-cells = <1>;
-					#size-cells = <0>;  
-					panel_in: endpoint {
+					#size-cells = <0>;
+					port@0{
+						reg = <0>;
+						panel_in: endpoint {
                                 remote-endpoint = <&dsi0_out>;
                         };
+					};
                 };
         };
 
