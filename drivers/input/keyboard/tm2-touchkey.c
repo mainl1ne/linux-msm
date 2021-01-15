@@ -41,6 +41,7 @@ struct touchkey_variant {
 	u8 cmd_led_off;
 	bool no_reg;
 	bool fixed_regulator;
+	bool supports_release;
 };
 
 struct tm2_touchkey_data {
@@ -81,6 +82,14 @@ static const struct touchkey_variant tc360_touchkey_variant = {
 	.fixed_regulator = true,
 	.cmd_led_on = TM2_TOUCHKEY_CMD_LED_ON,
 	.cmd_led_off = TM2_TOUCHKEY_CMD_LED_OFF,
+	.supports_release = true,
+};
+
+static const struct touchkey_variant tc360_j5_touchkey_variant = {
+	.keycode_reg = 0x00,
+	.base_reg = 0x00,
+	.fixed_regulator = true,
+	.supports_release = true,
 };
 
 static int tm2_touchkey_led_brightness_set(struct led_classdev *led_dev,
@@ -148,21 +157,33 @@ static irqreturn_t tm2_touchkey_irq_handler(int irq, void *devid)
 			"failed to read i2c data: %d\n", data);
 		goto out;
 	}
-
-	index = (data & TM2_TOUCHKEY_BIT_KEYCODE) - 1;
-	if (index < 0 || index >= touchkey->num_keycodes) {
-		dev_warn(&touchkey->client->dev,
-			 "invalid keycode index %d\n", index);
-		goto out;
+	if (touchkey->variant->supports_release){
+		dev_warn(&touchkey->client->dev, "got %x\n", data);
+		if (data >> 4){
+			dev_warn(&touchkey->client->dev, "RELEASE 0x%x\n", data >> 4);
+			input_report_key(touchkey->input_dev, touchkey->keycodes[(data >> 4) - 1], 0);
+		}
+		else{
+			dev_warn(&touchkey->client->dev, "PRESS 0x%x\n", data);
+			input_report_key(touchkey->input_dev, touchkey->keycodes[data - 1], 1);
+		}
 	}
+	else{
+		index = (data & TM2_TOUCHKEY_BIT_KEYCODE) - 1;
+		if (index < 0 || index >= touchkey->num_keycodes) {
+			dev_warn(&touchkey->client->dev,
+				"invalid keycode index %d\n", index);
+			goto out;
+		}
 
-	if (data & TM2_TOUCHKEY_BIT_PRESS_EV) {
-		for (i = 0; i < touchkey->num_keycodes; i++)
+		if (data & TM2_TOUCHKEY_BIT_PRESS_EV) {
+			for (i = 0; i < touchkey->num_keycodes; i++)
+				input_report_key(touchkey->input_dev,
+						touchkey->keycodes[i], 0);
+		} else {
 			input_report_key(touchkey->input_dev,
-					 touchkey->keycodes[i], 0);
-	} else {
-		input_report_key(touchkey->input_dev,
-				 touchkey->keycodes[index], 1);
+					touchkey->keycodes[index], 1);
+		}
 	}
 
 	input_sync(touchkey->input_dev);
